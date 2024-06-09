@@ -1,0 +1,39 @@
+FROM archlinux as build
+
+ARG NEEDS_BUILD=0
+ARG SYSEXT_NAME="hyprland_sysext"
+ENV SYSEXT_NAME=${SYSEXT_NAME}
+ENV SYSEXT_FILE=/usr/lib/extension-release.d/extension-release.${SYSEXT_NAME}
+
+RUN pacman -Syu --noconfirm  \
+    && if (( $NEEDS_BUILD )); then pacman -S --noconfirm \
+        gdb ninja gcc cmake meson libxcb xcb-proto \
+        xcb-util xcb-util-keysyms libxfixes libx11 \
+        libxcomposite xorg-xinput libxrender pixman \
+        wayland-protocols cairo pango seatd libxkbcommon \
+        xcb-util-wm xorg-xwayland libinput libliftoff \
+        libdisplay-info cpio tomlplusplus hyprlang hyprcursor \
+        hyprwayland-scanner xcb-util-errors \
+        ; fi
+
+RUN pacman -S --noconfirm hyprland
+
+RUN mkdir -p /usr/lib/extension-release.d && touch ${SYSEXT_FILE} \
+&& echo "ID=_any" | tee ${SYSEXT_FILE}
+
+COPY ./export-deps.sh /
+RUN chmod +x /export-deps.sh \
+    && /export-deps.sh hyprland /out.tar \
+    && rm -rf /out/ \
+    && mkdir -p /out/usr/local && \
+    tar -C /out/usr/local --strip-components=1 -xvf /out.tar
+
+# Move all the file tree to /usr/local
+FROM scratch
+
+ARG SYSEXT_NAME="hyprland_sysext"
+ARG SYSEXT_FILE=/usr/lib/extension-release.d/extension-release.${SYSEXT_NAME}
+
+COPY --from=build /out /
+COPY --from=build ${SYSEXT_FILE} ${SYSEXT_FILE}
+
